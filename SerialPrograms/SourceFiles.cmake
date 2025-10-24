@@ -636,6 +636,8 @@ file(GLOB LIBRARY_SOURCES
     Source/Controllers/ControllerTypeStrings.cpp
     Source/Controllers/ControllerTypeStrings.h
     Source/Controllers/ControllerTypes.h
+    Source/Controllers/GamepadInput/GamepadInput.cpp
+    Source/Controllers/GamepadInput/GamepadInput.h
     Source/Controllers/JoystickTools.h
     Source/Controllers/KeyboardInput/GlobalQtKeyMap.cpp
     Source/Controllers/KeyboardInput/GlobalQtKeyMap.h

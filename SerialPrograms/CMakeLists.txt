@@ -73,40 +73,38 @@ if(NOT QT_MAJOR)
     set(QT_MAJOR 6)
 endif()
 
+set(QT_REQUIRED_COMPONENTS Widgets SerialPort Multimedia MultimediaWidgets)
+
 # Find Qt and windeployqt.exe relative to the Qt bin dir. If CI, not Windows, or not deploying, just find_package()
 if(WIN32 AND QT_DEPLOY_FILES)
-    # Define the base Qt installation directory
     if(PREFERRED_QT_DIR AND PREFERRED_QT_VER)
         set(QT_CANDIDATE_DIR "${PREFERRED_QT_DIR}/${PREFERRED_QT_VER}/msvc2022_64/lib/cmake")
     endif()
 
-    # Set default base directory just in case, validate that Qt specified in CMakePresets.json exists
-    # Otherwise search out the latest available in the default Qt directory.
     set(QT_BASE_DIR "C:/Qt")
+    set(_qt_search_path "")
+
     if(QT_CANDIDATE_DIR AND EXISTS "${QT_CANDIDATE_DIR}")
         message(STATUS "Using preferred Qt directory for Qt${QT_MAJOR} ${PREFERRED_QT_VER}: ${QT_CANDIDATE_DIR}")
-        set(CMAKE_PREFIX_PATH "${QT_CANDIDATE_DIR}")
-        find_package(Qt${QT_MAJOR} ${PREFERRED_QT_VER} COMPONENTS Widgets SerialPort Multimedia MultimediaWidgets REQUIRED)
+        set(_qt_search_path "${QT_CANDIDATE_DIR}")
     else()
-        # Find all subdirectories in the Qt base directory
-        find_package(Qt${QT_MAJOR} COMPONENTS Widgets SerialPort Multimedia MultimediaWidgets REQUIRED)
         file(GLOB QT_SUBDIRS LIST_DIRECTORIES true "${QT_BASE_DIR}/${QT_MAJOR}*")
-
-        # Filter and sort the directories to find the latest version
         list(SORT QT_SUBDIRS)
         list(REVERSE QT_SUBDIRS)
-
-        # Get the first directory in the sorted list (latest version)
         list(GET QT_SUBDIRS 0 QT_LATEST_DIR)
-
-        # Debug message to verify the latest Qt directory
         if(QT_LATEST_DIR)
             message(STATUS "Latest Qt directory for Qt${QT_MAJOR}: ${QT_LATEST_DIR}")
-            set(CMAKE_PREFIX_PATH "${QT_LATEST_DIR}/msvc2022_64/lib/cmake")
+            set(_qt_search_path "${QT_LATEST_DIR}/msvc2022_64/lib/cmake")
         else()
             message(FATAL_ERROR "No Qt${QT_MAJOR} installation found in ${QT_BASE_DIR}")
         endif()
     endif()
+
+    if(_qt_search_path)
+        set(CMAKE_PREFIX_PATH "${_qt_search_path}")
+    endif()
+
+    find_package(Qt${QT_MAJOR} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
     # Find windeployqt.exe for Qt dependency deployment
     get_target_property(qt_core_location Qt${QT_MAJOR}::Core LOCATION)
@@ -117,7 +115,7 @@ if(WIN32 AND QT_DEPLOY_FILES)
         REQUIRED
     )
 else()
-    find_package(Qt${QT_MAJOR} COMPONENTS Widgets SerialPort Multimedia MultimediaWidgets REQUIRED)
+    find_package(Qt${QT_MAJOR} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 endif()
 
 # disable deprecated Qt APIs
@@ -177,6 +175,9 @@ endif()
 function(apply_common_target_properties target_name)
     set_target_properties(${target_name} PROPERTIES LINKER_LANGUAGE CXX)
     target_link_libraries(${target_name} PRIVATE Qt${QT_MAJOR}::Widgets Qt${QT_MAJOR}::SerialPort Qt${QT_MAJOR}::Multimedia Qt${QT_MAJOR}::MultimediaWidgets)
+    if(WIN32)
+        target_link_libraries(${target_name} PRIVATE Xinput)
+    endif()
     target_link_libraries(${target_name} PRIVATE Threads::Threads)
 
     #add defines

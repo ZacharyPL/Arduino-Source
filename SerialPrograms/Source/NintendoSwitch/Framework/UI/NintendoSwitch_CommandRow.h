@@ -7,6 +7,8 @@
 #ifndef PokemonAutomation_NintendoSwitch_CommandRow_H
 #define PokemonAutomation_NintendoSwitch_CommandRow_H
 
+#include <memory>
+#include <optional>
 #include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
@@ -15,6 +17,7 @@
 #include "CommonFramework/Globals.h"
 #include "CommonFramework/VideoPipeline/VideoOverlaySession.h"
 #include "Controllers/ControllerSession.h"
+#include "Controllers/GamepadInput/GamepadInput.h"
 #include "NintendoSwitch/Options/NintendoSwitch_ModelType.h"
 
 namespace PokemonAutomation{
@@ -55,6 +58,17 @@ public:
     void on_state_changed(ProgramState state);
 
 private:
+    enum class InputSource{
+        Keyboard,
+        Gamepad
+    };
+
+    void refresh_input_mode_ui();
+    void refresh_gamepad_devices();
+    void sync_gamepad_activation();
+    std::string keyboard_status_text() const;
+    std::string gamepad_status_text(const GamepadInput::GamepadStatus& status) const;
+
     virtual void on_overlay_enabled_stats  (bool enabled) override;
     virtual void on_overlay_enabled_boxes  (bool enabled) override;
     virtual void on_overlay_enabled_text   (bool enabled) override;
@@ -68,6 +82,8 @@ private:
     bool m_allow_commands_while_running;
     QComboBox* m_command_box = nullptr;
     QLabel* m_status = nullptr;
+    QComboBox* m_input_source_dropdown = nullptr;
+    QComboBox* m_gamepad_dropdown = nullptr;
 
     CheckboxDropdownItem* m_overlay_stats = nullptr;
     CheckboxDropdownItem* m_overlay_boxes = nullptr;
@@ -81,6 +97,13 @@ private:
     QPushButton* m_video_button = nullptr;
     bool m_last_known_focus;
     ProgramState m_last_known_state;
+
+    InputSource m_input_source = InputSource::Keyboard;
+    std::optional<int> m_selected_gamepad;
+    GamepadInput::DeviceMonitor& m_device_monitor;
+    QMetaObject::Connection m_device_monitor_connection;
+    std::unique_ptr<GamepadInput::GamepadController> m_gamepad_controller;
+    bool m_gamepad_supported = false;
 };
 
 
