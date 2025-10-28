@@ -4,8 +4,10 @@
  *
  */
 
+#include "CommonFramework/Logging/Logger.h"
 #include "CommonFramework/Exceptions/OperationFailedException.h"
 #include "CommonFramework/ProgramStats/StatsTracking.h"
+#include "CommonFramework/Tools/ErrorDumper.h"
 //#include "CommonFramework/VideoPipeline/VideoFeed.h"
 #include "CommonTools/Async/InferenceRoutines.h"
 //#include "CommonTools/VisualDetectors/BlackScreenDetector.h"
@@ -54,10 +56,43 @@ std::unique_ptr<StatsTracker> RestaurantFarmer_Descriptor::make_stats() const{
 }
 
 
-RestaurantFarmer::RestaurantFarmer(){}
+RestaurantFarmer::~RestaurantFarmer(){
+    STOP_AFTER_CURRENT.remove_listener(*this);
+}
+
+RestaurantFarmer::RestaurantFarmer()
+    : m_stop_after_current(false)
+{
+    PA_ADD_OPTION(STOP_AFTER_CURRENT);
+    STOP_AFTER_CURRENT.set_idle();
+    STOP_AFTER_CURRENT.add_listener(*this);
+}
 
 
-void RestaurantFarmer::run_lobby(SingleSwitchProgramEnvironment& env, ProControllerContext& context){
+
+RestaurantFarmer::StopButton::StopButton()
+    : ButtonOption(
+      "<b>Stop after current battle:",
+      "Stop after current battle",
+      0, 16
+    )
+{}
+void RestaurantFarmer::StopButton::set_idle(){
+    this->set_enabled(false);
+    this->set_text("Stop after Current Battle");
+}
+void RestaurantFarmer::StopButton::set_ready(){
+    this->set_enabled(true);
+    this->set_text("Stop after Current Battle");
+}
+void RestaurantFarmer::StopButton::set_pressed(){
+    this->set_enabled(false);
+    this->set_text("Program will stop after current battle...");
+}
+
+
+
+bool RestaurantFarmer::run_lobby(SingleSwitchProgramEnvironment& env, ProControllerContext& context){
     RestaurantFarmer_Descriptor::Stats& stats = env.current_stats<RestaurantFarmer_Descriptor::Stats>();
 
     while (true){
@@ -94,13 +129,18 @@ void RestaurantFarmer::run_lobby(SingleSwitchProgramEnvironment& env, ProControl
         switch (ret){
         case 0:
             env.log("Detected A button.");
+            if (m_stop_after_current.load(std::memory_order_relaxed)){
+                return true;
+            }
             pbf_press_button(context, BUTTON_A, 160ms, 80ms);
             continue;
 
         case 1:
             env.log("Detected selection arrow.");
+            // This is when the restaurant receptionist is asking whether you want
+            // to start the battle
             pbf_mash_button(context, BUTTON_A, 5000ms);
-            return;
+            return false;
 
         case 2:
             env.log("Detected white dialog.");
@@ -133,71 +173,99 @@ void RestaurantFarmer::run_battle(SingleSwitchProgramEnvironment& env, ProContro
 
     WallClock start = current_time();
 
-
-    SelectionArrowWatcher arrow(
-        COLOR_YELLOW, &env.console.overlay(),
-        SelectionArrowType::RIGHT,
-        {0.654308, 0.481553, 0.295529, 0.312621}
-    );
-    ItemReceiveWatcher item_receive(COLOR_RED, &env.console.overlay(), 1000ms);
-    BlueDialogWatcher dialog1(COLOR_RED, &env.console.overlay());
-
-
-    int ret = run_until<ProControllerContext>(
-        env.console, context,
-        [=](ProControllerContext& context){
-            while (current_time() - start < 30min){
-                ssf_press_button(context, BUTTON_ZL, 160ms, 800ms, 200ms);
-                ssf_press_button(context, BUTTON_PLUS, 320ms, 840ms);
-                pbf_wait(context, 104ms);
-                pbf_press_button(context, BUTTON_X, 80ms, 24ms);
-                pbf_press_button(context, BUTTON_Y, 80ms, 24ms);
-                pbf_press_button(context, BUTTON_B, 80ms, 24ms);
-            }
-        },
-        {
-            arrow,
-            item_receive,
-            dialog1,
-        }
-    );
-
-    switch (ret){
-    case 0:
-        env.log("Detected selection arrow. (unexpected)", COLOR_RED);
-        stats.errors++;
-        stats.battles++;
-        env.update_stats();
-        return;
-
-    case 1:
-    case 2:
-        env.log("Detected blue dialog. End of battle!");
-        stats.battles++;
-        env.update_stats();
-        return;
-
-    default:
-        stats.errors++;
-        env.update_stats();
-        OperationFailedException::fire(
-            ErrorReport::SEND_ERROR_REPORT,
-            "Battle took longer than 30 minutes.",
-            env.console
+    while (true){
+        SelectionArrowWatcher arrow(
+            COLOR_YELLOW, &env.console.overlay(),
+            SelectionArrowType::RIGHT,
+            {0.654308, 0.481553, 0.295529, 0.312621}
         );
+        ItemReceiveWatcher item_receive(COLOR_RED, &env.console.overlay(), 1000ms);
+        BlueDialogWatcher dialog1(COLOR_RED, &env.console.overlay());
+
+
+        int ret = run_until<ProControllerContext>(
+            env.console, context,
+            [=](ProControllerContext& context){
+                while (current_time() - start < 30min){
+                    ssf_press_button(context, BUTTON_ZL, 160ms, 800ms, 200ms);
+                    ssf_press_button(context, BUTTON_PLUS, 320ms, 840ms);
+                    pbf_wait(context, 104ms);
+                    pbf_press_button(context, BUTTON_X, 80ms, 24ms);
+                    pbf_press_button(context, BUTTON_Y, 80ms, 24ms);
+                    pbf_press_button(context, BUTTON_B, 80ms, 24ms);
+                }
+            },
+            {
+                arrow,
+                item_receive,
+                dialog1,
+            }
+        );
+
+        switch (ret){
+        case 0:
+            env.log("Detected selection arrow. (unexpected)", COLOR_RED);
+            dump_image(env.console.logger(), env.program_info(), env.console.video(), "UnexpectedSelectionArrow");
+            stats.errors++;
+//            stats.battles++;
+            env.update_stats();
+//            return;
+           continue;
+
+        case 1:
+        case 2:
+            env.log("Detected blue dialog. End of battle!");
+            stats.battles++;
+            env.update_stats();
+            return;
+
+        default:
+            stats.errors++;
+            env.update_stats();
+            OperationFailedException::fire(
+                ErrorReport::SEND_ERROR_REPORT,
+                "Battle took longer than 30 minutes.",
+                env.console
+            );
+        }
+
     }
 }
 
 
 
+class RestaurantFarmer::ResetOnExit{
+public:
+    ResetOnExit(StopButton& button)
+        : m_button(button)
+    {}
+    ~ResetOnExit(){
+        m_button.set_idle();
+    }
+
+private:
+    StopButton& m_button;
+};
+
+void RestaurantFarmer::on_press(){
+    global_logger_tagged().log("Stop after current requested...");
+    m_stop_after_current.store(true, std::memory_order_relaxed);
+    STOP_AFTER_CURRENT.set_pressed();
+}
+
 void RestaurantFarmer::program(SingleSwitchProgramEnvironment& env, ProControllerContext& context){
 
+    m_stop_after_current.store(false, std::memory_order_relaxed);
+    STOP_AFTER_CURRENT.set_ready();
+    ResetOnExit reset_button_on_exit(STOP_AFTER_CURRENT);
     pbf_mash_button(context, BUTTON_B, 1000ms);
 
 //    auto lobby = env.console.video().snapshot();
 
     while (true){
-        run_lobby(env, context);
+        if (run_lobby(env, context)){
+            break;
+        }
         run_battle(env, context);
     }
 

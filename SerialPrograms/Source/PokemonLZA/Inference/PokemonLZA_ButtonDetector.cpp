@@ -37,6 +37,8 @@ const char* template_path(ButtonType type){
         return "PokemonLZA/Buttons/ButtonMinus.png";
     case ButtonType::ButtonRight:
         return "PokemonLZA/Buttons/ButtonRight.png";
+    case ButtonType::RightStickUpDown:
+        return "PokemonLZA/Buttons/RightStickUpDown.png";
     default:
         return "";
     }
@@ -45,23 +47,25 @@ const char* template_path(ButtonType type){
 const char* button_name(ButtonType type){
     switch (type){
     case ButtonType::ButtonA:
-        return "A";
+        return "ButtonA";
     case ButtonType::ButtonB:
-        return "B";
+        return "ButtonB";
     case ButtonType::ButtonX:
-        return "X";
+        return "ButtonX";
     case ButtonType::ButtonY:
-        return "Y";
+        return "ButtonY";
     case ButtonType::ButtonL:
-        return "L";
+        return "ButtonL";
     case ButtonType::ButtonR:
-        return "R";
+        return "ButtonR";
     case ButtonType::ButtonPlus:
-        return "+";
+        return "Button+";
     case ButtonType::ButtonMinus:
-        return "-";
+        return "Button-";
     case ButtonType::ButtonRight:
-        return ">";
+        return "ButtonR";
+    case ButtonType::RightStickUpDown:
+        return "RightStickUpDown";
     default:
         return "";
     }
@@ -87,6 +91,8 @@ const ButtonMatcher& get_button_matcher(ButtonType type){
         return ButtonMatcher::Minus();
     case ButtonType::ButtonRight:
         return ButtonMatcher::Right();
+    case ButtonType::RightStickUpDown:
+        return ButtonMatcher::RightStickUpDown();
     default:
         throw std::runtime_error("No corresponding ButtonMatcher for ButtonType");
     }
@@ -133,11 +139,14 @@ bool ButtonDetector::detect(const ImageViewRGB32& screen){
     size_t min_area = size_t(screen_rel_size_2 * min_area_3840p);
 
     const std::vector<std::pair<uint32_t, uint32_t>> FILTERS = {
-        {0xffc0c0c0, 0xffffffff},
-        {0xffb0b0b0, 0xffffffff},
-        {0xffa0a0a0, 0xffffffff},
-        {0xff909090, 0xffffffff},
         {0xff808080, 0xffffffff},
+        {0xff909090, 0xffffffff},
+        {0xffa0a0a0, 0xffffffff},
+        {0xffb0b0b0, 0xffffffff},
+        {0xffc0c0c0, 0xffffffff},
+        {0xffd0d0d0, 0xffffffff},
+        {0xffe0e0e0, 0xffffffff},
+        {0xfff0f0f0, 0xffffffff},
     };
 
     bool found = match_template_by_waterfill(
